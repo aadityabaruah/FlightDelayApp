@@ -1,0 +1,555 @@
+<!DOCTYPE html>
+<html lang="en">
+{% load static %}
+<head>
+    <script type="importmap">
+{
+  "imports": {
+    "three": "https://unpkg.com/three@0.149.0/build/three.module.js",
+    "OrbitControls": "https://unpkg.com/three@0.149.0/examples/jsm/controls/OrbitControls.js"
+  }
+}
+</script>
+
+
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Flight Delay Prediction</title>
+    <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/4.5.2/css/bootstrap.min.css">
+    <style>
+        body {
+    margin: 0;
+    overflow: auto;
+    background: url('{% static "images/wallpaperflare.com_wallpaper.jpg" %}') no-repeat center center fixed;
+    background-size: cover;
+    color: white;
+}
+
+form {
+    background: rgba(0, 0, 0, 0.6);
+    padding: 20px;
+    border-radius: 10px;
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+    position: relative;
+    z-index: 1000;
+}
+
+form h2 {
+    border-bottom: 2px solid white;
+    padding-bottom: 10px;
+    margin-bottom: 20px;
+}
+
+.form-group {
+    margin-bottom: 15px;
+}
+
+.form-group label {
+    display: block;
+    margin-bottom: 5px;
+}
+
+input[type="text"].form-control,
+input[type="date"].form-control,
+input[type="time"].form-control,
+input[type="number"].form-control {
+    cursor: url('{% static "images/i-cursor.png" %}'), auto;
+    background: rgba(255, 255, 255, 0.9);
+    color: black;
+    padding: 10px 15px;
+    border-radius: 5px;
+    border: 1px solid #ccc;
+    box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+    transition: all 0.3s ease;
+}
+
+input[type="text"].form-control:hover {
+    border-color: #b0b0b0;
+    box-shadow: 0 3px 6px rgba(0,0,0,0.1);
+}
+
+input[type="text"].form-control:focus {
+    border-color: #007bff;
+    box-shadow: 0 3px 6px rgba(0,0,0,0.1);
+    outline: none;
+}
+
+.btn-primary {
+    background-color: #007bff;
+    border-color: #007bff;
+    transition: background-color 0.3s, border-color 0.3s;
+}
+
+.circle {
+    height: 24px;
+    width: 24px;
+    border-radius: 24px;
+    background-color: black;
+    position: fixed;
+    top: 0;
+    left: 0;
+    pointer-events: none;
+    z-index: 99999999; /* so that it stays on top of all other elements */
+}
+
+.btn-primary:hover, .btn-primary:focus {
+    background-color: #0056b3;
+    border-color: #0056b3;
+}
+
+
+.container {
+    display: flex;
+    width: 100vw;
+    justify-content: space-between;
+    align-items: flex-start;
+    padding: 2rem 0;
+}
+
+#loadingScreen {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100vw;
+    height: 100vh;
+    background-color: #d3e0f1;
+    z-index: 9999;
+    display: none;
+    justify-content: center;
+    align-items: center;
+    opacity: 0;
+    transition: opacity 1s ease-in-out;
+}
+
+#loadingScreen img {
+    max-width: 100vw;
+    max-height: 100vh;
+    object-fit: contain;
+}
+
+.left, .right {
+    flex: 1;
+    padding: 0 1rem;
+}
+
+#earthContainer {
+    padding-top: 20px;
+    padding-left: 20px;
+    width: calc(100% - 20px);
+    height: calc(70vh - 20px);
+    z-index: 9;
+}
+
+.hidden {
+    opacity: 0;
+    visibility: hidden;
+    transition: opacity 0.2s, visibility 0.2s;
+}
+
+.visible {
+    opacity: 1;
+    visibility: visible;
+}
+
+h2, label {
+    color: white;
+}
+
+.star {
+    position: absolute;
+    background-color: white;
+    width: 2px;
+    height: 2px;
+    border-radius: 50%;
+    z-index: 8;  /* This will place stars behind the container */
+}
+
+    </style>
+</head>
+<body>
+<div id="star-container"></div>
+<div id="rotate-device" class="hidden" style="position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(255,255,255,0.7); z-index:9999; text-align:center; padding-top:20%;">
+    <img src="{% static 'images/rotate.png' %}" alt="Rotate to Landscape" style="width:50%; max-width:300px;">
+    <p style="color:black; font-size:1.5em; margin-top:20px; font-weight:bold; text-shadow: 1px 1px 2px rgba(0, 0, 0, 0.2);">Please rotate your device to landscape mode.</p>
+</div>
+
+
+
+
+
+<div class="container">
+    <div class="left">
+        <h2>Flight Delay Prediction</h2>
+        <form action="{% url 'predict' %}" method="post">
+{#            {% csrf_token %}#}
+            <div class="form-group">
+                <label for="airline">Airline:</label>
+                <input type="text" class="form-control" id="airline" placeholder="Enter Airline" name="airline" list="airlines">
+                <datalist id="airlines">
+                    {% for airline in airlines %}
+                        <option value="{{ airline }}">
+                    {% endfor %}
+                </datalist>
+            </div>
+
+            <div class="form-group">
+                <label for="airport">Airport:</label>
+                <input type="text" class="form-control" id="airport" placeholder="Enter Airport" name="airport" list="airports">
+                <datalist id="airports">
+                    {% for airport in airports %}
+                        <option value="{{ airport }}">
+                    {% endfor %}
+                </datalist>
+            </div>
+
+            <div class="form-group">
+                <label for="date">Date:</label>
+                <input type="date" class="form-control" id="date" name="date" required>
+            </div>
+
+            <div class="form-group">
+                <label for="departure_time">Departure Time:</label>
+                <input type="time" class="form-control" id="departure_time" name="departure_time" required>
+            </div>
+
+            <div class="form-group">
+                <label for="arrival_time">Arrival Time:</label>
+                <input type="time" class="form-control" id="arrival_time" name="arrival_time" required>
+            </div>
+
+            <div class="form-group">
+                <label for="flight_duration">Flight Duration (in minutes):</label>
+                <input type="number" class="form-control" id="flight_duration" name="flight_duration" placeholder="e.g., 180 for 3 hours" min="1" required>
+            </div>
+
+            <div class="form-group">
+                <label for="flight_distance">Flight Distance (in miles):</label>
+                <input type="number" class="form-control" id="flight_distance" name="flight_distance" placeholder="Enter Flight Distance" min="1" required>
+            </div>
+
+            <div class="form-group">
+                <label for="ticket_price">Ticket Price ($):</label>
+                <input type="number" class="form-control" id="ticket_price" name="ticket_price" placeholder="Enter Ticket Price" min="0" required>
+            </div>
+
+            <button type="submit" class="btn btn-primary">Predict</button>
+        </form>
+    </div>
+        <div id="loadingScreen" style="display: none;">
+        <img src="{% static 'images/loading.gif' %}" alt="Loading...">
+    </div>
+
+    <div class="right">
+        <div id="earthContainer"></div>
+    </div>
+
+    <div class="right" style="position: absolute; top: 0; left: 50%;">
+    <div id="starsContainer"></div>
+</div>
+</div>
+
+<script type="module">
+    import * as THREE from 'three';
+    import { OrbitControls } from 'OrbitControls';
+
+    var earthContainer = document.getElementById('earthContainer');
+    var scene = new THREE.Scene();
+
+    var camera = new THREE.PerspectiveCamera(75, earthContainer.clientWidth / earthContainer.clientHeight, 0.1, 1000);
+    camera.position.set(-0.5, -0.5, 5); // Adjusted camera position
+
+    var renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+    renderer.setSize(earthContainer.clientWidth, earthContainer.clientHeight);
+    earthContainer.appendChild(renderer.domElement);
+
+    // Initialize the OrbitControls here
+    var controls = new OrbitControls(camera, renderer.domElement);
+    controls.enableDamping = true;
+    controls.dampingFactor = 0.05;
+    controls.autoRotate = true;
+    controls.autoRotateSpeed = 0.5;
+    controls.target.set(0, 0, 0);
+    controls.enableZoom = false; // Disabled zooming
+    controls.update();
+
+    var geometry = new THREE.SphereGeometry(2.3, 32, 32);
+    var texture = new THREE.TextureLoader().load('{% static "images/earthcolour.jpg" %}');
+    var bumpTexture = new THREE.TextureLoader().load(' {% static "images/earthtexturebump.jpg" %}');
+    var specularTexture = new THREE.TextureLoader().load('{% static "images/earthspeculartexture.jpg"%}');
+
+    var material = new THREE.MeshPhongMaterial({
+        map: texture,
+        bumpMap: bumpTexture,
+        bumpScale: 0.05,
+        specularMap: specularTexture,
+        specular: new THREE.Color('grey')
+    });
+
+    var sphere = new THREE.Mesh(geometry, material);
+    scene.add(sphere);
+
+    var ambientLight = new THREE.AmbientLight(0x999999);
+    scene.add(ambientLight);
+
+    var directionalLight = new THREE.DirectionalLight(0xffffff);
+    directionalLight.position.set(1, 1, 1).normalize();
+    scene.add(directionalLight);
+
+    function animate() {
+        requestAnimationFrame(animate);
+        controls.update();
+        renderer.render(scene, camera);
+    }
+
+    function updateAspectRatio() {
+        var width = earthContainer.clientWidth;
+        var height = earthContainer.clientHeight;
+        camera.aspect = width / height;
+        camera.updateProjectionMatrix();
+        renderer.setSize(width, height);
+    }
+
+    function checkOrientation() {
+        if (window.innerHeight > window.innerWidth) {
+            // Portrait mode
+            if(document.getElementById("rotate-device").classList.contains('hidden')) {
+                toggleOverlay(); // Show overlay with fade-in effect
+            }
+        } else {
+            // Landscape mode
+            if(document.getElementById("rotate-device").classList.contains('visible')) {
+                toggleOverlay(); // Hide overlay with fade-out effect
+            }
+        }
+    }
+    checkOrientation(); // Initial check
+
+    let mouseX = 0;
+    let mouseY = 0;
+
+    document.addEventListener('mousemove', (e) => {
+        mouseX = e.clientX - window.innerWidth / 2;
+        mouseY = e.clientY - window.innerHeight / 2;
+    });
+
+    function updateParallax() {
+        const parallaxFactor = 0.05;  // Adjust this value for more or less pronounced effect
+
+        const earthContainer = document.querySelector('#earthContainer');
+
+        // Calculate the amount of translation
+        const dx = mouseX * parallaxFactor;
+        const dy = mouseY * parallaxFactor;
+
+        earthContainer.style.transform = `translate(${dx}px, ${dy}px)`;
+
+        // Call this function repeatedly to update the position
+        requestAnimationFrame(updateParallax);
+    }
+
+    updateParallax();
+
+
+    function toggleOverlay() {
+        const overlay = document.getElementById('rotate-device');
+        if (overlay.classList.contains('hidden')) {
+            overlay.classList.remove('hidden');
+            overlay.classList.add('visible');
+        } else {
+            overlay.classList.remove('visible');
+            overlay.classList.add('hidden');
+        }
+    }
+
+    document.addEventListener('DOMContentLoaded', function() {
+    // Create 300 stars
+    for (let i = 0; i < 300; i++) {
+        let star = document.createElement('div');
+        star.className = 'star';
+        star.style.top = Math.random() * window.innerHeight + 'px';
+        star.style.left = Math.random() * window.innerWidth + 'px';
+        document.getElementById('star-container').appendChild(star);
+
+    }
+
+    document.addEventListener('mousemove', (e) => {
+        const stars = document.querySelectorAll('.star');
+        const mouseX = e.clientX;
+        const mouseY = e.clientY;
+
+        stars.forEach(star => {
+            const dx = star.offsetLeft - mouseX;
+            const dy = star.offsetTop - mouseY;
+            const dist = Math.sqrt(dx * dx + dy * dy);
+
+            const force = Math.max(window.innerWidth, window.innerHeight) / (dist * 5);
+
+            star.style.transform = `translate(${dx * force}px, ${dy * force}px)`;
+        });
+    });
+});
+
+    // Initial check
+    checkOrientation();
+
+    // Add event listener
+    window.addEventListener("resize", checkOrientation);
+
+
+    window.addEventListener('resize', updateAspectRatio);
+    updateAspectRatio();
+    animate();
+    document.querySelector('form').addEventListener('submit', function(e) {
+    e.preventDefault(); // Prevents the form from submitting immediately
+
+    // Show the loading screen
+    let loadingScreen = document.getElementById('loadingScreen');
+loadingScreen.style.display = 'flex';
+setTimeout(() => {
+    loadingScreen.style.opacity = '1';
+}, 50);
+
+    // After the GIF duration or a set timeout
+    setTimeout(function() {
+        // If you're using AJAX to fetch results, do it here
+
+        // If you're redirecting to another page, do it here, e.g.,
+        // location.href = '/results';
+
+        // For now, let's just submit the form after the delay
+        e.target.submit();
+    }, 5000); // 5 seconds for demonstration purposes
+});
+
+    const coords = { x: 0, y: 0 };
+    const circles = document.querySelectorAll(".circle");
+
+const colors = [
+  "#ffb56b",
+  "#fdaf69",
+  "#f89d63",
+  "#f59761",
+  "#ef865e",
+  "#ec805d",
+  "#e36e5c",
+  "#df685c",
+  "#d5585c",
+  "#d1525c",
+  "#c5415d",
+  "#c03b5d",
+  "#b22c5e",
+  "#ac265e",
+  "#9c155f",
+  "#950f5f",
+  "#830060",
+  "#7c0060",
+  "#680060",
+  "#60005f",
+  "#48005f",
+  "#3d005e"
+];
+
+circles.forEach(function (circle, index) {
+  circle.x = 0;
+  circle.y = 0;
+  circle.style.backgroundColor = colors[index % colors.length];
+});
+
+window.addEventListener("mousemove", function(e){
+  coords.x = e.clientX;
+  coords.y = e.clientY;
+
+});
+
+
+window.addEventListener("deviceorientation", handleOrientation);
+    
+function handleOrientation(event) {
+    const alpha = event.alpha;  // Rotation around the z-axis
+    const beta = event.beta;   // Tilt front/back (rotation around x-axis)
+    const gamma = event.gamma; // Tilt left/right (rotation around y-axis)
+
+    // Convert degrees to radians and adjust the camera's position
+    const radius = 5;  // Distance from the target (center of the Earth)
+    const phi = THREE.MathUtils.degToRad(90 - beta);
+    const theta = THREE.MathUtils.degToRad(alpha);
+
+    camera.position.x = radius * Math.sin(phi) * Math.cos(theta);
+    camera.position.y = radius * Math.cos(phi);
+    camera.position.z = radius * Math.sin(phi) * Math.sin(theta);
+    camera.lookAt(scene.position);
+}
+
+// Request permission for gyroscope data
+if (typeof DeviceOrientationEvent.requestPermission === 'function') {
+    DeviceOrientationEvent.requestPermission()
+        .then(permissionState => {
+            if (permissionState === 'granted') {
+                window.addEventListener('deviceorientation', handleOrientation);
+            }
+        })
+        .catch(console.error);
+} else {
+    // For older browsers
+    window.addEventListener('deviceorientation', handleOrientation);
+}
+
+
+const formElement = document.querySelector('form');
+formElement.addEventListener('mouseenter', function() {
+    circles.forEach(circle => circle.style.zIndex = '0'); // Send to background
+});
+
+formElement.addEventListener('mouseleave', function() {
+    circles.forEach(circle => circle.style.zIndex = '99999999'); // Bring to foreground
+});
+
+
+function animateCircles() {
+
+  let x = coords.x;
+  let y = coords.y;
+
+  circles.forEach(function (circle, index) {
+    circle.style.left = x - 12 + "px";
+    circle.style.top = y - 12 + "px";
+
+    circle.style.scale = (circles.length - index) / circles.length;
+
+    circle.x = x;
+    circle.y = y;
+
+    const nextCircle = circles[index + 1] || circles[0];
+    x += (nextCircle.x - x) * 0.25;
+    y += (nextCircle.y - y) * 0.25;
+  });
+
+  requestAnimationFrame(animateCircles);
+}
+
+    animateCircles();
+
+</script>
+<div class="circle"></div>
+  <div class="circle"></div>
+  <div class="circle"></div>
+  <div class="circle"></div>
+  <div class="circle"></div>
+  <div class="circle"></div>
+  <div class="circle"></div>
+  <div class="circle"></div>
+  <div class="circle"></div>
+  <div class="circle"></div>
+  <div class="circle"></div>
+  <div class="circle"></div>
+  <div class="circle"></div>
+  <div class="circle"></div>
+  <div class="circle"></div>
+  <div class="circle"></div>
+  <div class="circle"></div>
+  <div class="circle"></div>
+  <div class="circle"></div>
+  <div class="circle"></div>
+
+</body>
+</html>
